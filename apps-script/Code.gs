@@ -88,7 +88,7 @@ function applyOps(ops) {
     const ss = dataSS_();
     const { state, ver } = readStore_(ss);
     const team = (state.config && state.config.team) || [];
-    const me = team.find(m => (m.email || '').toLowerCase() === u.email);
+    const me = team.find(m => String(m.email || '').toLowerCase().split(/[\s,;]+/).includes(u.email));
     const role = u.isOwner ? 'admin' : (me ? me.role : (team.length ? 'viewer' : 'admin'));
     if (role === 'viewer') throw new Error('Tài khoản ' + u.email + ' chỉ có quyền xem.');
     const touched = {};

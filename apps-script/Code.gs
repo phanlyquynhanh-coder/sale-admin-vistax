@@ -29,13 +29,18 @@ function setup() {
 function dataSS_() {
   const p = PropertiesService.getScriptProperties();
   const id = p.getProperty('DATA_ID');
-  if (id) return SpreadsheetApp.openById(id);
-  const ss = SpreadsheetApp.create('Sale Admin VistaX – Dữ liệu');
-  p.setProperty('DATA_ID', ss.getId());
-  const st = ss.getSheets()[0].setName(STORE);
-  st.getRange('A1:B1').setValues([['{}', 0]]);
-  st.hideSheet();
-  ['Dự án', 'Hạng mục', 'Công việc', 'Lịch sử'].forEach(n => ss.insertSheet(n));
+  let ss;
+  if (id) ss = SpreadsheetApp.openById(id);
+  else {
+    ss = SpreadsheetApp.create('Sale Admin VistaX – Dữ liệu');
+    p.setProperty('DATA_ID', ss.getId());
+    ss.getSheets()[0].setName(STORE).getRange('A1:B1').setValues([['{}', 0]]);
+  }
+  // Tạo các tab xem trước, rồi mới ẩn _store (Google không cho ẩn tab duy nhất)
+  ['Dự án', 'Hạng mục', 'Công việc', 'Lịch sử'].forEach(n => { if (!ss.getSheetByName(n)) ss.insertSheet(n); });
+  let st = ss.getSheetByName(STORE);
+  if (!st) { st = ss.insertSheet(STORE); st.getRange('A1:B1').setValues([['{}', 0]]); }
+  if (!st.isSheetHidden()) st.hideSheet();
   return ss;
 }
 

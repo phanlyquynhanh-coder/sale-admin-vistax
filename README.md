@@ -6,7 +6,7 @@ Hệ thống quản lý công việc Sale Admin / Growth: **Dự án › Hạng 
 
 | | Bản chính (Google) | Bản độc lập |
 |---|---|---|
-| Mở ở đâu | https://script.google.com/macros/s/AKfycby7ZUyJAge9fSDV7LR6EqUdYyxz-RVUcZq188tuyY8NzkEPxNtqcQbSxyBDID19aQjIOQ/exec | https://phanlyquynhanh-coder.github.io/sale-admin-vistax/ hoặc file `sale-admin-vistax.html` |
+| Mở ở đâu | https://script.google.com/macros/s/AKfycby7ZUyJAge9fSDV7LR6EqUdYyxz-RVUcZq188tuyY8NzkEPxNtqcQbSxyBDID19aQjIOQ/exec?authuser=phanlyquynhanh@gmail.com (thêm `?authuser=<email>` khi trình duyệt đăng nhập nhiều tài khoản Google) | https://phanlyquynhanh-coder.github.io/sale-admin-vistax/ hoặc file `sale-admin-vistax.html` |
 | Đăng nhập | Tài khoản Google, vai trò theo email | Không |
 | Dữ liệu | Google Sheet [Sale Admin VistaX – Dữ liệu](https://docs.google.com/spreadsheets/d/1mKWglv9PQSHPix7qJ0xvgYTy9AlMSPw2n1EQaqM4frY/edit) | Trình duyệt của máy đang mở |
 | Checklist | Đọc trực tiếp sheet DỰ ÁN và CÔNG NỢ TỔNG HỢP | Dán dòng từ sheet DỰ ÁN |

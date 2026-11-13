@@ -1,22 +1,32 @@
 # Sale Admin VistaX
 
-Ứng dụng quản lý công việc cho đội Sale Admin, gói trong **một file HTML** (`sale-admin-vistax.html`). Không cần cài đặt, không cần máy chủ.
+Hệ thống quản lý công việc Sale Admin / Growth: **Dự án › Hạng mục › Công việc**, Daily To-do, Lịch, Báo cáo, Thông báo, Lịch sử.
 
-## Cách dùng
-1. Tải file `sale-admin-vistax.html`, mở bằng Chrome hoặc Edge.
-2. Vào **Cài đặt**: thêm thành viên và vai trò, ngày nghỉ lễ.
-3. Chọn tên của mình ở góc trái dưới.
-4. Tạo dự án (hoặc **Nhập từ Checklist** bằng cách dán dòng từ sheet DỰ ÁN), thêm hạng mục, thêm công việc.
+## Hai cách chạy
 
-## Dữ liệu
-- Lưu trong trình duyệt của máy đang mở (localStorage, khóa `saleadmin_vistax_v1`).
-- Làm chung giữa nhiều máy: **Cài đặt → Xuất file dữ liệu (.json)**, gửi file, máy khác **Nhập file dữ liệu**. File nhập sau thay thế toàn bộ dữ liệu trên máy nhận, nên một người giữ bản gốc.
-- Không dùng chế độ ẩn danh; xuất file sao lưu mỗi tuần.
+| | Bản chính (Google) | Bản độc lập |
+|---|---|---|
+| Mở ở đâu | Link web app Google Apps Script | https://phanlyquynhanh-coder.github.io/sale-admin-vistax/ hoặc file `sale-admin-vistax.html` |
+| Đăng nhập | Tài khoản Google, vai trò theo email | Không |
+| Dữ liệu | Google Sheet "Sale Admin VistaX – Dữ liệu" (tự tạo) | Trình duyệt của máy đang mở |
+| Checklist | Đọc trực tiếp sheet DỰ ÁN và CÔNG NỢ TỔNG HỢP | Dán dòng từ sheet DỰ ÁN |
+| Dùng chung | Có, theo thời gian thực (làm mới mỗi 45 giây) | Xuất / Nhập file .json |
 
-## Màn hình
-Tổng quan · Daily To-do · Dự án (Dự án › Hạng mục › Công việc) · Công việc (danh sách / bảng kéo thả) · Lịch · Báo cáo (xuất CSV) · Thông báo · Lịch sử · Cài đặt · Hướng dẫn (đặc tả đầy đủ trong ứng dụng).
+## Cấu trúc repo
+- `app.css`, `shell.html`, `app.js` — giao diện và logic, dùng chung cho cả hai bản. Sửa ở đây rồi đẩy GitHub là bản Google tự nhận (sau vài phút).
+- `index.html` — trang GitHub Pages (bản độc lập).
+- `sale-admin-vistax.html` — bản một file để tải về dùng ngoại tuyến.
+- `apps-script/Code.gs`, `apps-script/Index.html` — mã cho dự án Google Apps Script.
 
-## Giới hạn hiện tại
-- Chưa có đăng nhập; vai trò chỉ là phân quyền trên giao diện.
-- Chưa đồng bộ tự động giữa nhiều máy; chưa gửi thông báo email/Zalo.
-- Muốn dùng chung thời gian thực: nâng cấp lên bản có máy chủ (ví dụ Next.js + Supabase), giữ nguyên mô hình dữ liệu trong mục Hướng dẫn → 5.
+## Cài bản Google (một lần)
+1. script.google.com → New project → đặt tên "Sale Admin VistaX".
+2. Dán `apps-script/Code.gs` vào Code.gs; thêm file HTML tên `Index`, dán `apps-script/Index.html`.
+3. Chọn hàm `setup` → Run → cấp quyền. File dữ liệu được tạo trong Drive.
+4. Deploy → New deployment → Web app · Execute as: **User accessing the web app** · Who has access: **Anyone with Google account** → Deploy → lưu link.
+
+## Thêm người dùng sau này
+1. Cài đặt → Thành viên: nhập tên, **email Google**, vai trò.
+2. Chia sẻ quyền **Chỉnh sửa** file "Sale Admin VistaX – Dữ liệu" và quyền **Xem** file Checklist cho email đó.
+3. Gửi họ link web app.
+
+Checklist chỉ được đọc, ứng dụng không ghi gì vào Checklist.

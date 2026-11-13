@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://phanlyquynhanh-coder.github.io/sale-admin-vistax/app.css">
+</head>
+<body>
+<div id="boot" style="font:14px system-ui;padding:40px;color:#726B7C">Đang tải Sale Admin VistaX…</div>
+<script>
+// Giao diện tải từ GitHub Pages; dữ liệu đi qua google.script.run (Code.gs)
+(function () {
+  var A = 'https://phanlyquynhanh-coder.github.io/sale-admin-vistax/', v = '?v=' + Math.floor(Date.now() / 60000);
+  fetch(A + 'shell.html' + v).then(function (r) { return r.text(); }).then(function (h) {
+    document.getElementById('boot').outerHTML = h;
+    var s = document.createElement('script'); s.src = A + 'app.js' + v; document.body.appendChild(s);
+  }).catch(function (e) { document.getElementById('boot').textContent = 'Không tải được giao diện từ GitHub Pages: ' + e; });
+})();
+</script>
+</body>
+</html>

@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
+
 /* Bố cục: thanh điều hướng tối bên trái + thanh tiêu đề trên + vùng nội dung dạng thẻ; ngăn chi tiết trượt từ phải */
 :root{
   --brand:#8A2655; --brand-600:#731F46; --brand-soft:#F7E9F0; --brand-line:#E9C9D8;
@@ -211,9 +212,14 @@ dialog.center[open]{animation:none}
   .tabs-m{display:block}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+.syncst{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);white-space:nowrap;padding:5px 10px;border:1px solid var(--line);border-radius:999px;background:var(--surface)}
+.dotc{width:8px;height:8px;border-radius:50%;display:inline-block}
+@media (max-width:860px){.syncst{display:none}}
 </style>
 </head>
 <body>
+
 <div class="app">
   <nav class="side" id="nav" aria-label="Điều hướng">
     <div class="logo"><span class="mk">VX</span><div><b>Sale Admin</b><small>VistaX · vận hành</small></div></div>
@@ -229,12 +235,13 @@ dialog.center[open]{animation:none}
     <a href="#lich-su" data-v="lich-su"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.6-6.4L3 8M3 3v5h5M12 7.5V12l3 2"/></svg>Lịch sử</a>
     <a href="#cai-dat" data-v="cai-dat"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17" r="2"/></svg>Cài đặt</a>
     <a href="#huong-dan" data-v="huong-dan"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10a4 4 0 0 1 4 4v12H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/></svg>Hướng dẫn</a>
-    <div class="side-foot"><label for="meSel">Đang làm việc với tên</label><select id="meSel"></select><span id="meRole"></span></div>
+    <div class="side-foot"><label for="meSel" id="meLab">Đang làm việc với tên</label><select id="meSel"></select><span id="meRole"></span></div>
   </nav>
   <div class="main">
     <header class="top">
       <div class="crumbs" id="crumbs"></div>
       <label class="search" for="gq"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="gq" type="search" placeholder="Tìm mã, công việc, dự án…" autocomplete="off"></label>
+      <span class="syncst" id="sync"></span>
       <button class="btn pri" id="topNew" type="button"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Tạo công việc</button>
       <span class="avatar" id="meAv" title="">?</span>
     </header>
@@ -244,6 +251,7 @@ dialog.center[open]{animation:none}
 <dialog id="dlg"><form class="dlg" id="dlgForm" method="dialog"></form></dialog>
 <div class="toast" id="toast" hidden></div>
 <script>
+
 'use strict';
 /* =====================================================================
    SALE ADMIN VISTAX — ứng dụng một file HTML
@@ -285,27 +293,88 @@ function vns(s){ if (!s) return ''; const [,m,d] = s.split('-'); return `${d}/${
 function dt(s){ if (!s) return ''; const d = new Date(s); return isNaN(d) ? '' : d.toLocaleString('vi-VN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit',year:'numeric'}); }
 const DOW = ['CN','T2','T3','T4','T5','T6','T7'];
 
-/* ---------- Kho dữ liệu (một nguồn duy nhất) ---------- */
+/* ---------- Kho dữ liệu (một nguồn duy nhất) ----------
+   REMOTE: chạy trong Google Apps Script → dữ liệu ở Google Sheet "Sale Admin VistaX – Dữ liệu", đọc Checklist trực tiếp.
+   LOCAL : mở file / GitHub Pages → dữ liệu trong trình duyệt (localStorage). */
 const S = {P:{}, I:{}, T:{}, L:[], N:{}, cfg:{}};
 const CFG0 = {team:[], workdays:[1,2,3,4,5], holidays:[], soonDays:2, stuckDays:3};
-let SAVE_OK = true;
-function load(){
-  let raw = LS.get(DB_KEY), j = null;
-  try { j = raw ? JSON.parse(raw) : null; } catch(_) { j = null; }
-  if (!j) { j = seed(); }
-  S.P = j.projects || {}; S.I = j.items || {}; S.T = j.tasks || {}; S.L = j.logs || []; S.N = j.notes || {}; S.cfg = {...CFG0, ...(j.config||{})};
-  if (!raw) persist();
+const REMOTE = !!(window.google && google.script && google.script.run);
+let SAVE_OK = true, READY = false, USER = {email:'', isOwner:false}, DATA_URL = '', SYNC = {ver:0, pending:false, busy:false, err:'', at:''};
+let CK = {deals:[], no:[], at:'', err:'', loading:false};
+const gs = (fn, ...args) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn](...args));
+function applyState(j){ S.P = j.projects || {}; S.I = j.items || {}; S.T = j.tasks || {}; S.L = j.logs || []; S.N = j.notes || {}; S.cfg = {...CFG0, ...(j.config||{})}; }
+let LAST = {};  // bản đã đồng bộ của từng bản ghi, để chỉ gửi phần thay đổi
+function remember(){ LAST = {}; for (const [c, m] of [['projects',S.P],['items',S.I],['tasks',S.T],['notes',S.N]]) for (const [id, o] of Object.entries(m)) LAST[c+'/'+id] = JSON.stringify(o); LAST.config = JSON.stringify(S.cfg); LAST.logIds = new Set(S.L.map(l => l.id)); }
+async function load(){
+  if (!REMOTE) {
+    let raw = LS.get(DB_KEY), j = null;
+    try { j = raw ? JSON.parse(raw) : null; } catch(_) { j = null; }
+    applyState(j || seed()); if (!raw) persist(); READY = true; return;
+  }
+  try {
+    const r = await gs('loadAll');
+    USER = r.user || USER; DATA_URL = r.dataUrl || ''; SYNC.ver = r.version || 0;
+    applyState(r.state || {}); remember(); READY = true; SYNC.at = new Date().toISOString();
+  } catch(err) { READY = true; SYNC.err = 'Không tải được dữ liệu: ' + (err && err.message || err); }
+  loadChecklist();
+}
+async function loadChecklist(force){
+  if (!REMOTE || CK.loading) return; CK.loading = true; CK.err = ''; if (force) render();
+  try { const r = await gs('getChecklist', !!force); CK = {...r, loading:false, err:''}; }
+  catch(err) { CK.loading = false; CK.err = (err && err.message) || String(err); }
+  render();
 }
 function snapshot(){ return {app:'sale-admin-vistax', version:1, savedAt:new Date().toISOString(), projects:S.P, items:S.I, tasks:S.T, logs:S.L, notes:S.N, config:S.cfg}; }
-function persist(){ SAVE_OK = LS.set(DB_KEY, JSON.stringify(snapshot())); if (!SAVE_OK) toast('Trình duyệt chặn lưu dữ liệu (chế độ ẩn danh hoặc đầy bộ nhớ). Hãy Xuất file dữ liệu ngay.'); }
-window.addEventListener('storage', e => { if (e.key === DB_KEY) { load(); render(); } });
+function collectOps(){
+  const ops = [];
+  for (const [c, m] of [['projects',S.P],['items',S.I],['tasks',S.T],['notes',S.N]]) {
+    for (const [id, o] of Object.entries(m)) { const j = JSON.stringify(o); if (LAST[c+'/'+id] !== j) ops.push({c, id, v:o}); }
+    Object.keys(LAST).filter(k => k.startsWith(c+'/') && !(k.slice(c.length+1) in m)).forEach(k => ops.push({c, id:k.slice(c.length+1), v:null}));
+  }
+  const cfg = JSON.stringify(S.cfg); if (cfg !== LAST.config) ops.push({c:'config', v:S.cfg});
+  const newLogs = S.L.filter(l => !LAST.logIds.has(l.id)); if (newLogs.length) ops.push({c:'logs', v:newLogs});
+  return ops;
+}
+function persist(){
+  if (!REMOTE) { SAVE_OK = LS.set(DB_KEY, JSON.stringify(snapshot())); if (!SAVE_OK) toast('Trình duyệt chặn lưu dữ liệu (chế độ ẩn danh hoặc đầy bộ nhớ). Hãy Xuất file dữ liệu ngay.'); return; }
+  SYNC.pending = true; syncUI(); clearTimeout(persist.t); persist.t = setTimeout(flush, 350);
+}
+async function flush(){
+  if (SYNC.busy) { persist.t = setTimeout(flush, 400); return; }
+  const ops = collectOps(); if (!ops.length) { SYNC.pending = false; syncUI(); return; }
+  SYNC.busy = true; syncUI();
+  const sent = {}; ops.forEach(o => { if (o.c === 'config') sent.config = JSON.stringify(o.v); else if (o.c !== 'logs') sent[o.c+'/'+o.id] = o.v ? JSON.stringify(o.v) : undefined; });
+  try {
+    const r = await gs('applyOps', ops);
+    Object.entries(sent).forEach(([k, v]) => { if (v === undefined) delete LAST[k]; else LAST[k] = v; });
+    ops.filter(o => o.c === 'logs').forEach(o => o.v.forEach(l => LAST.logIds.add(l.id)));
+    SYNC.ver = r.version; SYNC.err = ''; SYNC.at = new Date().toISOString();
+  } catch(err) { SYNC.err = 'Chưa lưu được: ' + ((err && err.message) || err) + '. Đang thử lại…'; setTimeout(persist, 5000); }
+  SYNC.busy = false; SYNC.pending = collectOps().length > 0; syncUI(); if (SYNC.pending) persist();
+}
+async function poll(){
+  if (!REMOTE || SYNC.pending || SYNC.busy || document.hidden || $('#dlg').open) return;
+  try { const r = await gs('loadAll', SYNC.ver); if (r && r.state && r.version !== SYNC.ver && !SYNC.pending) { SYNC.ver = r.version; applyState(r.state); remember(); render(); } } catch(_) {}
+}
+function syncUI(){
+  const el = $('#sync'); if (!el) return;
+  if (!REMOTE) { el.innerHTML = `<span class="dotc" style="background:var(--soon)"></span>Lưu trên trình duyệt này`; el.title = 'Bản chạy độc lập: dữ liệu chỉ có trên máy này'; return; }
+  if (SYNC.err) { el.innerHTML = `<span class="dotc" style="background:var(--late)"></span>Lỗi lưu`; el.title = SYNC.err; return; }
+  el.innerHTML = SYNC.busy || SYNC.pending ? `<span class="dotc" style="background:var(--soon)"></span>Đang lưu…` : `<span class="dotc" style="background:var(--done)"></span>Đã lưu`;
+  el.title = 'Dữ liệu lưu trong Google Sheet' + (SYNC.at ? ' · lần cuối ' + dt(SYNC.at) : '');
+}
+window.addEventListener('beforeunload', e => { if (REMOTE && (SYNC.pending || SYNC.busy)) { e.preventDefault(); e.returnValue = ''; } });
+if (!REMOTE) window.addEventListener('storage', e => { if (e.key === DB_KEY) { load(); render(); } });
+else setInterval(poll, 45000);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
 /* ---------- Người dùng & quyền ---------- */
-let ME = LS.get('sa_me') || '';
+let ME = REMOTE ? '' : (LS.get('sa_me') || '');
 function team(){ return (S.cfg.team||[]).filter(m => m.active !== false); }
 function people(){ const s = new Set(team().map(m => m.name)); Object.values(S.T).forEach(t => [t.assignee, t.assigner, ...(t.collab||[])].forEach(x => x && s.add(x))); Object.values(S.P).forEach(p => p.owner && s.add(p.owner)); return [...s].sort((a,b) => a.localeCompare(b,'vi')); }
-function myRole(){ if (!team().length) return 'setup'; const m = team().find(m => m.name === ME); return m ? m.role : 'viewer'; }
+function meMember(){ return REMOTE && USER.email ? team().find(m => (m.email||'').toLowerCase() === USER.email.toLowerCase()) : team().find(m => m.name === ME); }
+function syncMe(){ if (!REMOTE) return; const m = meMember(); ME = m ? m.name : (USER.email ? USER.email.split('@')[0] : ''); }
+function myRole(){ if (REMOTE && USER.isOwner) return team().length ? 'admin' : 'setup'; if (!team().length) return 'setup'; const m = meMember(); return m ? m.role : 'viewer'; }
 function can(act, t){
   const r = myRole();
   if (r === 'setup' || r === 'admin') return true;
@@ -396,6 +465,8 @@ window.addEventListener('hashchange', route);
 function go(v){ if (location.hash.slice(1) === v) render(); else location.hash = v; }
 
 function meUI(){
+  syncMe(); syncUI();
+  if (REMOTE) { $('#meSel').hidden = true; $('#meLab').textContent = 'Đăng nhập Google'; $('#meRole').innerHTML = `<b style="color:#fff">${esc(ME||'—')}</b><br>${esc(USER.email||'')}<br>${esc(myRole()==='setup'?'Chủ sở hữu':(ROm[myRole()]||''))}`; $('#meAv').textContent = ME ? initials(ME) : '?'; $('#meAv').title = USER.email; return; }
   const ps = people();
   $('#meSel').innerHTML = '<option value="">— chọn tên của bạn —</option>' + ps.map(p => `<option ${p===ME?'selected':''}>${esc(p)}</option>`).join('');
   $('#meRole').textContent = myRole() === 'setup' ? 'Chưa cấu hình thành viên' : (ROm[myRole()] || '');
@@ -406,6 +477,7 @@ $('#gq').addEventListener('input', e => { F.q = e.target.value; if (VIEW !== 'co
 $('#topNew').addEventListener('click', () => openTask(null));
 
 function render(){
+  if (!READY) { $('#view').innerHTML = '<div class="empty">'+ic('hist')+'<b>Đang tải dữ liệu…</b><span>Đọc dữ liệu từ Google Sheet.</span></div>'; return; }
   meUI();
   $$('#nav a').forEach(a => a.classList.toggle('on', a.dataset.v === VIEW));
   const noti = notifications(); const c = $('#cNoti'); c.hidden = !noti.unread; c.textContent = noti.unread;
@@ -421,8 +493,10 @@ function head(t, sub, actions){ return `<div class="ph"><div><h1>${t}</h1>${sub?
 function banners(){
   const a = [];
   if (!SAVE_OK) a.push(`<div class="banner err">${ic('alert')}<span>Trình duyệt đang chặn lưu dữ liệu. Thay đổi sẽ mất khi đóng trang: vào <a href="#cai-dat">Cài đặt</a> → Xuất file dữ liệu.</span></div>`);
-  if (myRole() === 'setup') a.push(`<div class="banner">${ic('user')}<span>Chưa có danh sách thành viên. Vào <a href="#cai-dat">Cài đặt</a> để thêm người dùng và vai trò; trong lúc này mọi thao tác đều được phép.</span></div>`);
-  else if (!ME) a.push(`<div class="banner">${ic('user')}<span>Chọn tên của bạn ở góc trái dưới để thấy việc của mình và để lịch sử ghi đúng người cập nhật.</span></div>`);
+  if (SYNC.err) a.push(`<div class="banner err">${ic('alert')}<span>${esc(SYNC.err)}</span></div>`);
+  if (REMOTE && !USER.isOwner && !meMember() && team().length) a.push(`<div class="banner err">${ic('user')}<span>Tài khoản ${esc(USER.email)} chưa có trong danh sách thành viên nên chỉ xem được. Nhờ Quản trị viên thêm email của bạn ở Cài đặt.</span></div>`);
+  if (myRole() === 'setup') a.push(`<div class="banner">${ic('user')}<span>Chưa có danh sách thành viên. Vào <a href="#cai-dat">Cài đặt</a> để thêm bạn và người dùng khác (kèm email Google) cùng vai trò.</span></div>`);
+  else if (!ME && !REMOTE) a.push(`<div class="banner">${ic('user')}<span>Chọn tên của bạn ở góc trái dưới để thấy việc của mình và để lịch sử ghi đúng người cập nhật.</span></div>`);
   if (Object.values(S.P).some(p => p.sample)) a.push(`<div class="banner info">${ic('book')}<span>Đang có <b>dữ liệu mẫu</b> (nhãn MẪU) để minh họa. Xóa ở <a href="#cai-dat">Cài đặt</a> → Dữ liệu mẫu khi bắt đầu dùng thật.</span></div>`);
   return a.join('');
 }
@@ -541,12 +615,13 @@ function vProjects(){
   if (hp) return S.P[hp] ? vProject(S.P[hp]) : ($('#view').innerHTML = head('Không tìm thấy dự án', 'Dự án có thể đã bị xóa.', `<button class="btn" data-hash="du-an" type="button">Về danh sách dự án</button>`));
   const list = Object.values(S.P).sort((a,b) => String(a.code).localeCompare(String(b.code)));
   $('#view').innerHTML = head('Dự án', `${list.length} dự án · cấp 1 của cấu trúc Dự án › Hạng mục › Công việc`,
-    `<button class="btn" id="impCk" type="button">${ic('down')}Nhập từ Checklist</button><button class="btn pri" id="newProj" type="button" ${can('create')?'':'disabled'}>${ic('plus')}Tạo dự án</button>`) +
+    `<button class="btn" id="impCk" type="button">${ic('down')}${REMOTE?'Lấy deal từ Checklist':'Nhập từ Checklist'}</button><button class="btn pri" id="newProj" type="button" ${can('create')?'':'disabled'}>${ic('plus')}Tạo dự án</button>`) +
     (list.length ? `<div class="grid g4">${list.map(p => { const ts = projTasks(p.id), r = projRisk(p), pg = progress(ts); return `
       <article class="card" data-hash="da-${p.id}" style="cursor:pointer"><div class="cb">
         <div class="bar"><span class="code">${esc(p.code)}${p.dealId?' · '+esc(p.dealId):''}</span><span class="sp"></span>${stPill(autoStatus(ts, p.status))}</div>
         <div><div class="t-title" style="font-size:15px">${esc(p.name)}${sampleTag(p)}</div><div class="sub">${esc(p.cdt||'—')}</div></div>
         ${bar(pg)}
+        ${REMOTE && p.dealId && ckDeal(p.dealId) ? `<div class="bar sub"><span>Checklist: <b style="color:var(--ink2)">${esc(ckDeal(p.dealId).stage)}</b></span>${ckNo(p.dealId).length?`<span class="sp"></span><span>Còn nợ <b style="color:${ckNo(p.dealId).some(n=>n.st==='Quá hạn')?'var(--late)':'var(--ink2)'}">${money(ckNo(p.dealId).reduce((a,n)=>a+(+n.con||0),0))}</b></span>`:''}</div>` : ''}
         <div class="bar sub"><span>${ts.filter(t=>OPEN.has(t.status)).length} việc mở</span>${ts.filter(isLate).length?`<span class="f-late flag">${ts.filter(isLate).length} quá hạn</span>`:''}<span class="sp"></span><span>Hạn ${vn(p.due)||'—'}</span></div>
         <div class="bar">${whoChip(p.owner)}<span class="sp"></span>${prPill(p.priority)}</div>
         ${r?`<span class="flag f-late">${ic('alert')}${esc(r)}</span>`:''}
@@ -567,6 +642,7 @@ function vProject(p){
       <div class="kpi late"><span class="ic">${ic('alert')}</span><b>${ts.filter(isLate).length}</b><span>Việc quá hạn</span></div>
       <div class="kpi wait"><span class="ic">${ic('hour')}</span><b>${ts.filter(t=>t.status==='wait').length}</b><span>Đang chờ phản hồi</span></div></div>
     ${(p.goal||p.links||p.members?.length) ? card('Thông tin dự án', `<div class="form"><div class="full"><div class="sub">Mục tiêu</div><div>${esc(p.goal||'—')}</div></div><div><div class="sub">Phụ trách chính</div>${whoChip(p.owner)}</div><div><div class="sub">Thành viên</div>${esc((p.members||[]).join(', ')||'—')}</div>${p.links?`<div class="full"><div class="sub">Tài liệu</div>${linkify(p.links)}</div>`:''}</div>`) : ''}
+    ${ckCard(p)}
     <div class="tree">${items.length ? items.map(i => { const it = itemTasks(i.id); return `
       <section class="card item"><div class="ch"><span class="code">${esc(i.code)}</span><h2>${esc(i.name)}</h2>${stPill(autoStatus(it, i.status))}${prPill(i.priority)}<span class="sub">${esc(i.owner||'—')} · hạn ${vn(i.due)||'—'}</span><span class="sp" style="flex:1"></span><div style="width:150px">${bar(progress(it))}</div>
         <button class="btn sm" type="button" data-edit-item="${i.id}" ${can('edit')?'':'disabled'}>Sửa</button><button class="btn sm pri" type="button" data-add-task="${i.id}" ${can('create')?'':'disabled'}>${ic('plus')}Việc</button></div>
@@ -574,6 +650,7 @@ function vProject(p){
       : card('', emptyBox('list','Dự án chưa có hạng mục','Tạo hạng mục (ví dụ: Hợp đồng, Hồ sơ thanh toán, Bàn giao) rồi thêm công việc vào từng hạng mục.'))}</div>
     ${card('Lịch sử thay đổi', logList(S.L.filter(l => l.entityId === p.id || items.some(i => i.id === l.entityId) || ts.some(t => t.id === l.entityId)).slice(0,40)))}`;
   $('#editProj').onclick = () => openProject(p.id);
+  if ($('#ckRe')) $('#ckRe').onclick = () => loadChecklist(true);
   $('#newItem').onclick = () => openItem(null, p.id);
   $$('[data-edit-item]').forEach(b => b.onclick = () => openItem(b.dataset.editItem));
   $$('[data-add-task]').forEach(b => b.onclick = () => { const i = S.I[b.dataset.addTask]; openTask(null, {projectId:i.projectId, itemId:i.id}); });
@@ -788,16 +865,17 @@ function vSettings(){
   const dis = ok ? '' : 'disabled';
   $('#view').innerHTML = head('Cài đặt', ok ? 'Thay đổi áp dụng ngay cho dữ liệu trên trình duyệt này.' : 'Chỉ Quản trị viên được thay đổi cài đặt.') + `
     <div class="grid g2">
-    ${card('Thành viên và vai trò', `<p class="sub" style="margin:0">Mỗi người chọn tên của mình ở góc trái dưới. Đây là phân quyền trên giao diện, chưa phải đăng nhập.</p>
-      <div class="tbl"><table><thead><tr><th>Tên hiển thị</th><th>Vai trò</th><th>Đang làm</th><th></th></tr></thead><tbody>${(c.team||[]).map((m,i)=>`<tr><td><input value="${esc(m.name)}" data-tm="${i}" data-k="name" aria-label="Tên" ${dis}></td><td><select data-tm="${i}" data-k="role" aria-label="Vai trò" ${dis}>${ROLES.map(r=>`<option value="${r.k}" ${r.k===m.role?'selected':''}>${r.t}</option>`).join('')}</select></td><td><input type="checkbox" data-tm="${i}" data-k="active" ${m.active!==false?'checked':''} aria-label="Đang làm" ${dis}></td><td><button class="btn sm ghost danger" type="button" data-rm="${i}" ${dis}>Bỏ</button></td></tr>`).join('') || '<tr><td colspan="4" class="sub">Chưa có thành viên.</td></tr>'}</tbody></table></div>
-      <div class="bar"><input id="tmN" placeholder="Tên thành viên" aria-label="Tên thành viên mới" style="flex:1"><select id="tmR" aria-label="Vai trò">${ROLES.map(r=>`<option value="${r.k}">${r.t}</option>`).join('')}</select><button class="btn pri" id="tmAdd" type="button" ${dis}>Thêm</button></div>`)}
+    ${card('Thành viên và vai trò', `<p class="sub" style="margin:0">${REMOTE ? 'Mỗi người đăng nhập bằng tài khoản Google; hệ thống nhận ra vai trò theo email. Người mới cần được chia sẻ quyền Chỉnh sửa file dữ liệu Google Sheet.' : 'Mỗi người chọn tên của mình ở góc trái dưới. Bản chạy độc lập chưa có đăng nhập.'}</p>
+      <div class="tbl"><table><thead><tr><th>Tên hiển thị</th><th>Email Google</th><th>Vai trò</th><th>Đang làm</th><th></th></tr></thead><tbody>${(c.team||[]).map((m,i)=>`<tr><td><input value="${esc(m.name)}" data-tm="${i}" data-k="name" aria-label="Tên" ${dis}></td><td><input type="email" value="${esc(m.email||'')}" data-tm="${i}" data-k="email" aria-label="Email" placeholder="ten@gmail.com" ${dis}></td><td><select data-tm="${i}" data-k="role" aria-label="Vai trò" ${dis}>${ROLES.map(r=>`<option value="${r.k}" ${r.k===m.role?'selected':''}>${r.t}</option>`).join('')}</select></td><td><input type="checkbox" data-tm="${i}" data-k="active" ${m.active!==false?'checked':''} aria-label="Đang làm" ${dis}></td><td><button class="btn sm ghost danger" type="button" data-rm="${i}" ${dis}>Bỏ</button></td></tr>`).join('') || '<tr><td colspan="5" class="sub">Chưa có thành viên.</td></tr>'}</tbody></table></div>
+      <div class="bar"><input id="tmN" placeholder="Tên thành viên" aria-label="Tên thành viên mới" style="flex:1" value="${REMOTE && !(c.team||[]).length ? esc(USER.email.split('@')[0]) : ''}"><input id="tmE" type="email" placeholder="Email Google" aria-label="Email thành viên mới" style="flex:1" value="${REMOTE && !(c.team||[]).length ? esc(USER.email) : ''}"><select id="tmR" aria-label="Vai trò">${ROLES.map(r=>`<option value="${r.k}">${r.t}</option>`).join('')}</select><button class="btn pri" id="tmAdd" type="button" ${dis}>Thêm</button></div>`)}
     ${card('Ngày làm việc và cảnh báo', `<div class="chips">${DOW.map((d,i)=>`<label class="chip ${(c.workdays||[]).includes(i)?'on':''}"><input type="checkbox" data-wd="${i}" ${(c.workdays||[]).includes(i)?'checked':''} hidden ${dis}>${d}</label>`).join('')}</div>
       <div class="form"><label for="cfSoon">“Sắp đến hạn” khi còn ≤ (ngày làm việc)<input id="cfSoon" type="number" min="0" max="10" value="${c.soonDays ?? 2}" ${dis}></label><label for="cfStuck">“Kẹt chờ” khi không cập nhật ≥ (ngày làm việc)<input id="cfStuck" type="number" min="1" max="20" value="${c.stuckDays ?? 3}" ${dis}></label></div>
       <div class="bar"><input type="date" id="hdD" aria-label="Ngày nghỉ"><input id="hdN" placeholder="Tên ngày nghỉ" aria-label="Tên ngày nghỉ" style="flex:1"><button class="btn" id="hdAdd" type="button" ${dis}>Thêm ngày nghỉ</button></div>
       <div class="chips">${(c.holidays||[]).slice().sort((a,b)=>a.date.localeCompare(b.date)).map(h=>`<span class="chip">${vn(h.date)} · ${esc(h.name)} ${ok?`<button class="btn sm ghost" type="button" data-hd="${h.date}" aria-label="Bỏ ngày nghỉ">✕</button>`:''}</span>`).join('') || '<span class="sub">Chưa nhập ngày nghỉ lễ.</span>'}</div>
       <div class="bar"><span class="sp"></span><button class="btn pri" id="cfSave" type="button" ${dis}>Lưu cài đặt</button></div>`)}
     </div>
-    ${card('Dữ liệu: lưu, chia sẻ, sao lưu', `<p style="margin:0">Dữ liệu đang lưu <b>trong trình duyệt này</b> (${(JSON.stringify(snapshot()).length/1024).toFixed(0)} KB · ${Object.keys(S.T).length} công việc). Người khác không tự thấy. Để làm chung: một người giữ file dữ liệu gốc, mỗi cuối ngày <b>Xuất</b> rồi gửi; người nhận <b>Nhập</b> để cập nhật. Xóa dữ liệu trình duyệt sẽ mất dữ liệu, nên xuất file sao lưu mỗi tuần.</p>
+    ${card('Dữ liệu: lưu, chia sẻ, sao lưu', REMOTE ? `<p style="margin:0">Dữ liệu lưu trong Google Sheet <b>Sale Admin VistaX – Dữ liệu</b> trên Drive của chủ sở hữu, tự lưu sau mỗi thao tác. Các tab Dự án, Hạng mục, Công việc, Lịch sử trong file đó luôn cập nhật để xem hoặc lọc bằng Google Sheets. Google Drive tự giữ lịch sử phiên bản của file.</p>
+      <div class="bar">${DATA_URL?`<a class="btn" href="${esc(DATA_URL)}" target="_blank" rel="noopener">${ic('folder')}Mở file dữ liệu</a>`:''}<button class="btn" id="bkJ" type="button">${ic('down')}Tải bản sao lưu (.json)</button><label class="btn" for="rsF">${ic('up')}Khôi phục từ file…</label><input type="file" id="rsF" accept=".json,application/json" hidden ${dis}></div>` : `<p style="margin:0">Dữ liệu đang lưu <b>trong trình duyệt này</b> (${(JSON.stringify(snapshot()).length/1024).toFixed(0)} KB · ${Object.keys(S.T).length} công việc). Người khác không tự thấy. Để làm chung: một người giữ file dữ liệu gốc, mỗi cuối ngày <b>Xuất</b> rồi gửi; người nhận <b>Nhập</b> để cập nhật. Xóa dữ liệu trình duyệt sẽ mất dữ liệu, nên xuất file sao lưu mỗi tuần.</p>
       <div class="bar"><button class="btn" id="bkJ" type="button">${ic('down')}Xuất file dữ liệu (.json)</button><label class="btn" for="rsF">${ic('up')}Nhập file dữ liệu…</label><input type="file" id="rsF" accept=".json,application/json" hidden ${dis}></div>`)}
     ${card('Dữ liệu mẫu', `<p class="sub" style="margin:0">Dự án, hạng mục và công việc gắn nhãn MẪU chỉ để minh họa luồng sử dụng, không phải dữ liệu thật của VistaX.</p><div class="bar"><button class="btn danger" id="rmSample" type="button" ${dis}>Xóa toàn bộ dữ liệu mẫu</button><button class="btn" id="addSample" type="button" ${dis}>Tạo lại dữ liệu mẫu</button></div>`)}`;
   $('#bkJ').onclick = () => download(`sale-admin-vistax_du-lieu_${today()}.json`, JSON.stringify(snapshot(), null, 1), 'application/json');
@@ -806,7 +884,7 @@ function vSettings(){
   const saveTeam = () => { S.cfg.team = tm; persist(); render(); toast('Đã lưu thành viên'); };
   $$('[data-tm]').forEach(el => el.onchange = () => { const i = +el.dataset.tm; const v = el.type === 'checkbox' ? el.checked : el.value.trim(); if (el.dataset.k === 'name' && !v) { toast('Tên không được để trống.'); render(); return; } tm[i][el.dataset.k] = v; saveTeam(); });
   $$('[data-rm]').forEach(b => b.onclick = () => confirmBox(`Bỏ ${tm[+b.dataset.rm].name} khỏi danh sách?`, 'Việc đã giao cho người này vẫn giữ tên; hãy giao lại ở trang Công việc.', () => { tm.splice(+b.dataset.rm,1); saveTeam(); }));
-  $('#tmAdd').onclick = () => { const n = $('#tmN').value.trim(); if (!n) { toast('Nhập tên thành viên.'); return; } if (tm.some(m => norm(m.name) === norm(n))) { toast('Tên này đã có.'); return; } tm.push({name:n, role:$('#tmR').value, active:true}); if (!ME) { ME = n; LS.set('sa_me', n); } saveTeam(); };
+  $('#tmAdd').onclick = () => { const n = $('#tmN').value.trim(); if (!n) { toast('Nhập tên thành viên.'); return; } if (tm.some(m => norm(m.name) === norm(n))) { toast('Tên này đã có.'); return; } const em = ($('#tmE').value||'').trim().toLowerCase(); if (REMOTE && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { toast('Nhập email Google hợp lệ.'); return; } if (em && tm.some(m => (m.email||'').toLowerCase() === em)) { toast('Email này đã có.'); return; } tm.push({name:n, email:em, role:$('#tmR').value, active:true}); if (!ME) { ME = n; LS.set('sa_me', n); } saveTeam(); };
   $$('[data-wd]').forEach(el => el.onchange = () => el.parentElement.classList.toggle('on', el.checked));
   $('#hdAdd').onclick = () => { const d = $('#hdD').value; if (!d) { toast('Chọn ngày nghỉ.'); return; } S.cfg.holidays = (S.cfg.holidays||[]).filter(h => h.date !== d).concat({date:d, name:$('#hdN').value.trim()||'Nghỉ'}); persist(); render(); };
   $$('[data-hd]').forEach(b => b.onclick = () => { S.cfg.holidays = (S.cfg.holidays||[]).filter(h => h.date !== b.dataset.hd); persist(); render(); });
@@ -956,6 +1034,7 @@ function openTask(id, preset={}){
 
 /* ---------- Nhập dự án từ Checklist (dán dữ liệu) ---------- */
 function importChecklist(){
+  if (REMOTE) return importChecklistLive();
   openDlg(`${dlgHead('Nhập từ Checklist', 'Tạo dự án từ deal')}
     <p style="margin:0;color:var(--ink2)">Mở file Checklist, sheet <b>DỰ ÁN</b>, chọn các dòng cần lấy từ cột <b>C đến Y</b> (CĐT/Khách hàng … Trạng thái triển khai), bấm Ctrl+C rồi dán vào ô dưới. Deal đã có dự án sẽ được bỏ qua để không trùng.</p>
     <textarea id="ckPaste" style="min-height:160px;font-family:var(--mono);font-size:12px" placeholder="Dán dữ liệu ở đây…"></textarea>
@@ -975,6 +1054,38 @@ function importChecklist(){
     deals.filter(d => ids.includes(d.id)).forEach(d => save('projects', null, {code:nextCode('DA', S.P, 3), dealId:d.id, name:d.name, cdt:d.cdt, goal:d.hm, owner: people().includes(d.sale) ? d.sale : '', priority:'tb', status:'', start:today(), due:'', members:[]}));
     closeDlg(); toast(`Đã tạo ${ids.length} dự án. Mở từng dự án để nhập hạn và người phụ trách.`);
   };
+}
+
+function importChecklistLive(){
+  if (!CK.deals.length) { if (CK.err) { toast('Chưa đọc được Checklist: ' + CK.err); return; } toast('Đang đọc Checklist, thử lại sau vài giây.'); loadChecklist(true); return; }
+  const have = new Set(Object.values(S.P).map(p => p.dealId));
+  const list = CK.deals.filter(d => !have.has(d.id) && d.stage !== 'Lost');
+  const won = list.filter(d => d.stage === 'Won' && d.tk !== 'Hoàn thành'), other = list.filter(d => !won.includes(d));
+  const row = d => `<tr><td><input type="checkbox" class="imp" value="${esc(d.id)}" aria-label="Chọn ${esc(d.id)}"></td><td class="code">${esc(d.id)}</td><td><div class="t-title">${esc(d.name)}</div><div class="sub">${esc(d.cdt)}${d.hm?' · '+esc(d.hm):''}</div></td><td>${esc(d.stage)}</td><td>${esc(d.tk||'')}</td><td>${esc(d.sale)}</td></tr>`;
+  openDlg(`${dlgHead('Đọc trực tiếp sheet DỰ ÁN · ' + dt(CK.at), 'Tạo dự án từ Checklist')}
+    <p class="sub" style="margin:0">Deal đã có dự án được ẩn để không trùng. Mặc định hiện deal Won chưa hoàn thành triển khai.</p>
+    <div class="tbl" style="max-height:55vh;border:1px solid var(--line);border-radius:10px"><table><thead><tr><th></th><th>Deal</th><th>Dự án</th><th>Stage</th><th>Triển khai</th><th>Sale</th></tr></thead><tbody>${won.map(row).join('') || '<tr><td colspan="6" class="sub">Không còn deal Won nào chưa có dự án.</td></tr>'}</tbody><tbody id="impMore" hidden>${other.map(row).join('')}</tbody></table></div>
+    <div class="dlg-foot"><button class="btn ghost" type="button" id="impAll">Hiện cả deal đang chào giá (${other.length})</button><span class="sp"></span><button class="btn" type="submit" value="x">Hủy</button><button class="btn pri" type="button" id="impGo">Tạo dự án đã chọn</button></div>`);
+  $('#impAll').onclick = () => { $('#impMore').hidden = false; };
+  $('#impGo').onclick = () => {
+    const ids = $$('.imp:checked').map(c => c.value); if (!ids.length) { toast('Chưa chọn deal nào.'); return; }
+    CK.deals.filter(d => ids.includes(d.id)).forEach(d => save('projects', null, {code:nextCode('DA', S.P, 3), dealId:d.id, name:d.name, cdt:d.cdt, goal:d.hm, owner: people().includes(d.sale) ? d.sale : '', priority:'tb', status:'', start:today(), due:'', members:[]}));
+    closeDlg(); toast(`Đã tạo ${ids.length} dự án. Mở từng dự án để nhập hạn và người phụ trách.`);
+  };
+}
+const ckDeal = id => id ? CK.deals.find(d => d.id === id) : null;
+const ckNo = id => id ? CK.no.filter(n => n.id === id) : [];
+const money = n => (+n||0).toLocaleString('vi-VN');
+function ckCard(p){
+  if (!REMOTE || !p.dealId) return '';
+  const d = ckDeal(p.dealId), no = ckNo(p.dealId);
+  const body = CK.err ? `<div class="banner err">${ic('alert')}<span>Chưa đọc được Checklist: ${esc(CK.err)}</span></div>` : !d ? `<span class="sub">${CK.deals.length ? 'Không thấy Deal '+esc(p.dealId)+' trong sheet DỰ ÁN.' : 'Đang đọc Checklist…'}</span>` : `
+    <div class="grid g4" style="gap:12px">
+      <div><div class="sub">Stage</div><b>${esc(d.stage)}</b></div><div><div class="sub">Giá chào gần nhất (chưa VAT)</div><b>${money(d.val)}</b></div>
+      <div><div class="sub">Sale</div><b>${esc(d.sale||'—')}</b></div><div><div class="sub">Ngày chốt</div><b>${vn(d.chot)||'—'}</b></div>
+      <div><div class="sub">Triển khai</div><b>${esc(d.tk||'—')}</b></div><div><div class="sub">Next step</div><span>${esc(d.next||'—')}</span></div></div>
+    ${no.length ? `<div class="tbl" style="border:1px solid var(--line2);border-radius:10px"><table><thead><tr><th>Đợt thanh toán</th><th class="num">Còn nợ (gồm VAT)</th><th>Hạn</th><th>Trạng thái</th><th>Phản hồi</th></tr></thead><tbody>${no.map(n => `<tr><td>${esc(n.lbl)}</td><td class="num">${money(n.con)}</td><td>${vn(n.han)||'—'}</td><td><span class="pill ${n.st==='Quá hạn'?'s-cancel':n.st==='Trong hạn'?'s-wait':'s-hold'}" style="${n.st==='Quá hạn'?'color:var(--late);border-color:var(--late);text-decoration:none':''}">${esc(n.st)}</span></td><td class="sub">${esc(n.fb)}</td></tr>`).join('')}</tbody></table></div>` : '<span class="sub">Không còn khoản công nợ nào của deal này.</span>'}`;
+  return card(`Từ Checklist · ${esc(p.dealId)}`, body, {right:`<span class="sub">${CK.at ? 'đọc lúc ' + dt(CK.at) : ''}</span><button class="btn sm" type="button" id="ckRe">${CK.loading?'Đang đọc…':'Đọc lại'}</button>`});
 }
 
 /* ---------- Dữ liệu mẫu (gắn nhãn MẪU) ---------- */
@@ -1068,7 +1179,7 @@ config/main: team[{name, role, active}], workdays[], holidays[], soonDays, stuck
 }
 
 
-load(); route();
+(async () => { render(); await load(); route(); })();
 </script>
 </body>
 </html>

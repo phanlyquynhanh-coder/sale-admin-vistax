@@ -6,9 +6,9 @@ Hệ thống quản lý công việc Sale Admin / Growth: **Dự án › Hạng 
 
 | | Bản chính (Google) | Bản độc lập |
 |---|---|---|
-| Mở ở đâu | Link web app Google Apps Script | https://phanlyquynhanh-coder.github.io/sale-admin-vistax/ hoặc file `sale-admin-vistax.html` |
+| Mở ở đâu | https://script.google.com/macros/s/AKfycby7ZUyJAge9fSDV7LR6EqUdYyxz-RVUcZq188tuyY8NzkEPxNtqcQbSxyBDID19aQjIOQ/exec | https://phanlyquynhanh-coder.github.io/sale-admin-vistax/ hoặc file `sale-admin-vistax.html` |
 | Đăng nhập | Tài khoản Google, vai trò theo email | Không |
-| Dữ liệu | Google Sheet "Sale Admin VistaX – Dữ liệu" (tự tạo) | Trình duyệt của máy đang mở |
+| Dữ liệu | Google Sheet [Sale Admin VistaX – Dữ liệu](https://docs.google.com/spreadsheets/d/1mKWglv9PQSHPix7qJ0xvgYTy9AlMSPw2n1EQaqM4frY/edit) | Trình duyệt của máy đang mở |
 | Checklist | Đọc trực tiếp sheet DỰ ÁN và CÔNG NỢ TỔNG HỢP | Dán dòng từ sheet DỰ ÁN |
 | Dùng chung | Có, theo thời gian thực (làm mới mỗi 45 giây) | Xuất / Nhập file .json |
 
@@ -30,3 +30,6 @@ Hệ thống quản lý công việc Sale Admin / Growth: **Dự án › Hạng 
 3. Gửi họ link web app.
 
 Checklist chỉ được đọc, ứng dụng không ghi gì vào Checklist.
+
+## Cập nhật mã máy chủ
+Sửa `apps-script/Code.gs` → dán vào dự án Apps Script → Lưu → Triển khai → Quản lý các tùy chọn triển khai → sửa (bút chì) → Phiên bản: Mới → Triển khai. Link web app giữ nguyên.
